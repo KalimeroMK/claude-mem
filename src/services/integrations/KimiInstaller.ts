@@ -4,7 +4,6 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync, chmodSync, rmSync }
 import { execSync } from 'child_process';
 import { logger } from '../../utils/logger.js';
 import { injectContextIntoMarkdownFile } from '../../utils/context-injection.js';
-import { replaceTaggedContent } from '../../utils/claude-md-utils.js';
 import { KIMI_VSCODE_SCHEMA } from './KimiVscodeNormalizer.js';
 import {
   DEFAULT_CONFIG_PATH,
@@ -37,7 +36,7 @@ if [ -x "$REAL_KIMI" ]; then
   exec "$REAL_KIMI" "$@"
 else
   echo "[claude-mem] kimi binary not found at $REAL_KIMI — set KIMI_BASE_URL manually" >&2
-  exec env KIMI_BASE_URL="$KIMI_BASE_URL" KIMI_CWD="$KIMI_CWD" "$@"
+  exit 1
 fi
 `;
 }
@@ -124,7 +123,8 @@ function setupKimiMd(): void {
 
 *No context yet. Complete your first Kimi session and context will appear here.*`;
   mkdirSync(KIMI_DIR, { recursive: true });
-  if (existsSync(KIMI_MD_PATH)) return; // preserve existing content
+  // Only inject if the file doesn't already have a <claude-mem-context> block
+  if (existsSync(KIMI_MD_PATH) && readFileSync(KIMI_MD_PATH, 'utf-8').includes('<claude-mem-context>')) return;
   injectContextIntoMarkdownFile(KIMI_MD_PATH, placeholder, '# Kimi Context');
 }
 
@@ -211,8 +211,8 @@ export function uninstallKimi(): number {
   // Remove claude-mem context from KIMI.md (preserve user content)
   if (existsSync(KIMI_MD_PATH)) {
     let content = readFileSync(KIMI_MD_PATH, 'utf-8');
-    content = replaceTaggedContent(content, '');
-    writeFileSync(KIMI_MD_PATH, content, 'utf-8');
+    content = content.replace(/<claude-mem-context>[\s\S]*?<\/claude-mem-context>/g, '').trim();
+    writeFileSync(KIMI_MD_PATH, content ? content + '\n' : '', 'utf-8');
     console.log(`  Removed context section from ${KIMI_MD_PATH}`);
   }
 
