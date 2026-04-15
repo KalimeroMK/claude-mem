@@ -29,7 +29,7 @@ describe('KimiProxyServer.buildSessionId', () => {
 
   it('returns a UUID-like string when no user message present', () => {
     const id = proxy.buildSessionId([{ role: 'system', content: 'Context' }]);
-    expect(id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
   });
 
   it('is stable across multi-turn history (uses earliest user msg)', () => {
@@ -115,5 +115,14 @@ describe('KimiProxyServer.assembleStreamText', () => {
   it('handles chunks with no content delta', () => {
     const raw = 'data: {"choices":[{"delta":{}}]}\ndata: [DONE]\n';
     expect(proxy.assembleStreamText(raw)).toBe('');
+  });
+
+  it('skips malformed JSON data lines and continues', () => {
+    const raw = [
+      'data: not-json\n',
+      'data: {"choices":[{"delta":{"content":"OK"}}]}\n',
+      'data: [DONE]\n',
+    ].join('');
+    expect(proxy.assembleStreamText(raw)).toBe('OK');
   });
 });

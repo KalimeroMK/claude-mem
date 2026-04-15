@@ -115,14 +115,21 @@ export class KimiProxyServer {
     });
 
     const upstreamBody = { ...body, messages };
+    // Build filtered headers for upstream (strip internal claude-mem headers)
+    const upstreamHeaders = new Headers(req.headers);
+    upstreamHeaders.delete('x-kimi-cwd');
+
     const upstream = await fetch(`${MOONSHOT_BASE_URL}/chat/completions`, {
       method: 'POST',
-      headers: req.headers,
+      headers: upstreamHeaders,
       body: JSON.stringify(upstreamBody),
     });
 
     if (body.stream) {
-      const [forClient, forCapture] = upstream.body!.tee();
+      if (!upstream.body) {
+        return new Response('Upstream returned no body', { status: 502 });
+      }
+      const [forClient, forCapture] = upstream.body.tee();
       void this.captureAndNotify(forCapture, sessionId, cwd, body);
       return new Response(forClient, { status: upstream.status, headers: upstream.headers });
     }
@@ -133,10 +140,12 @@ export class KimiProxyServer {
     };
     const content = responseJson.choices?.[0]?.message?.content ?? '';
     const finishReason = responseJson.choices?.[0]?.finish_reason;
-    void this.sendObservation(sessionId, cwd, body, content);
-    if (finishReason === 'stop') {
-      void this.sessionCompleteAndRefreshContext(sessionId, cwd);
-    }
+    void (async () => {
+      await this.sendObservation(sessionId, cwd, body, content);
+      if (finishReason === 'stop') {
+        void this.sessionCompleteAndRefreshContext(sessionId, cwd);
+      }
+    })();
     return new Response(JSON.stringify(responseJson), {
       status: upstream.status,
       headers: upstream.headers,
@@ -156,8 +165,9 @@ export class KimiProxyServer {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
-        chunks.push(decoder.decode(value, { stream: !done }));
+        chunks.push(decoder.decode(value, { stream: true }));
       }
+      chunks.push(decoder.decode()); // flush any held multi-byte sequence
     } catch {
       // Stream cancelled by client — still process what we received
     }
