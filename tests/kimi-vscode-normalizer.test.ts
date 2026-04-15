@@ -75,6 +75,15 @@ describe('normalizeKimiVscodeFile', () => {
     normalizeKimiVscodeFile(source, sidecar);
     expect(existsSync(sidecar)).toBe(false);
   });
+
+  it('creates missing sidecar directory when needed', () => {
+    const source = join(tmpDir, 'session.json');
+    const sidecar = join(tmpDir, 'nested', 'deep', 'session.jsonl');
+    writeFileSync(source, JSON.stringify([{ role: 'user', content: 'Hi' }]), 'utf-8');
+
+    expect(() => normalizeKimiVscodeFile(source, sidecar)).not.toThrow();
+    expect(existsSync(sidecar)).toBe(true);
+  });
 });
 
 describe('KIMI_VSCODE_SCHEMA', () => {

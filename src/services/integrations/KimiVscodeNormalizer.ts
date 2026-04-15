@@ -38,6 +38,7 @@ export function normalizeKimiVscodeFile(sourcePath: string, sidecarPath: string)
   try {
     raw = readFileSync(sourcePath, 'utf-8');
   } catch {
+    logger.debug('PARSER', 'Could not read source file in VSCode normaliser', { sourcePath });
     return;
   }
 
@@ -45,7 +46,7 @@ export function normalizeKimiVscodeFile(sourcePath: string, sidecarPath: string)
   try {
     parsed = JSON.parse(raw);
   } catch {
-    logger.debug('KIMI', 'Skipping non-JSON file in VSCode normaliser', { sourcePath });
+    logger.debug('PARSER', 'Skipping non-JSON file in VSCode normaliser', { sourcePath });
     return;
   }
 
@@ -64,6 +65,8 @@ export function normalizeKimiVscodeFile(sourcePath: string, sidecarPath: string)
   }
 
   mkdirSync(dirname(sidecarPath), { recursive: true });
-  const jsonl = messages.map((m) => JSON.stringify(m)).join('\n');
+  const jsonl = messages.length > 0
+    ? messages.map((m) => JSON.stringify(m)).join('\n') + '\n'
+    : '';
   writeFileSync(sidecarPath, jsonl, 'utf-8');
 }
