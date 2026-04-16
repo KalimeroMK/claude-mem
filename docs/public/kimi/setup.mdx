@@ -65,32 +65,39 @@ npx claude-mem install kimi
 
 ### Option 2: Without Claude Code
 
-If you don't have Claude Code, use `npx` directly with the fork — no cloning or building required:
+If you don't have Claude Code, use `bunx` to install directly from the fork:
 
 ```bash
-npx github:KalimeroMK/claude-mem install --ide kimi
+bunx github:KalimeroMK/claude-mem install kimi
 ```
-
-That's it. `npx` fetches the fork from GitHub, builds it automatically, and runs the Kimi installer.
 
 <Note>
-**Prerequisites:** [Node.js 18+](https://nodejs.org) and [Bun](https://bun.sh) must be installed.
+**Prerequisites:** [Bun](https://bun.sh) and [Node.js 18+](https://nodejs.org) must be installed.
 
 ```bash
-# Install Node.js via nvm (recommended)
-curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
-nvm install --lts
-
 # Install Bun
 curl -fsSL https://bun.sh/install | bash
+source ~/.zshrc
+
+# Install Node.js via nvm (if not already installed)
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
+nvm install --lts
 ```
 
-After installing both, run `npx github:KalimeroMK/claude-mem install --ide kimi`.
+After installing both, run `bunx github:KalimeroMK/claude-mem install kimi`.
 </Note>
 
 <Warning>
-`npx claude-mem install --ide kimi` downloads the **original thedotmack package** from npm — it does not include the Kimi integration. Always use `npx github:KalimeroMK/claude-mem` to get this fork.
+`npx claude-mem install` downloads the **original thedotmack package** from npm — it does not include the Kimi integration. Use `bunx github:KalimeroMK/claude-mem` or the `install.sh` script below.
 </Warning>
+
+### Option 3: One-liner install script
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KalimeroMK/claude-mem/main/install.sh | bash -s -- kimi
+```
+
+This checks for prerequisites, installs Bun if missing, and runs the installer automatically.
 
 ---
 

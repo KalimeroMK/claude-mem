@@ -148,12 +148,12 @@ Or install for Kimi AI (Moonshot):
 
 ```bash
 # From the KalimeroMK fork (includes Kimi integration):
-npx github:KalimeroMK/claude-mem install --ide kimi
+bunx github:KalimeroMK/claude-mem install kimi
 ```
 
-> **Fresh Mac with nothing installed?** Install [Node.js](https://nodejs.org) (18+) and [Bun](https://bun.sh) first, then run `npx github:KalimeroMK/claude-mem install --ide kimi`. That's it — no Claude Code required. See the [Kimi AI Setup Guide](https://github.com/KalimeroMK/claude-mem/blob/main/docs/public/kimi/setup.mdx) for full details.
+> **Fresh Mac with nothing installed?** Install [Bun](https://bun.sh) first (`curl -fsSL https://bun.sh/install | bash`), then run `bunx github:KalimeroMK/claude-mem install kimi`. No Claude Code required. See the [Kimi AI Setup Guide](https://github.com/KalimeroMK/claude-mem/blob/main/docs/public/kimi/setup.mdx) for full details.
 >
-> **Note:** `npx claude-mem install --ide kimi` downloads the original npm package which does **not** include the Kimi integration. Use `npx github:KalimeroMK/claude-mem` for this fork.
+> **Note:** `npx claude-mem` downloads the original npm package which does **not** include the Kimi integration. Use `bunx github:KalimeroMK/claude-mem` for this fork. (`npx github:` is broken on npm 10+/Node 25+.)
 
 Or install from the plugin marketplace inside Claude Code:
 
