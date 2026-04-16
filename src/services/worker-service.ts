@@ -1146,6 +1146,36 @@ async function main() {
       break;
     }
 
+    case 'install': {
+      // `claude-mem install <ide>` — delegate to the appropriate IDE installer
+      const ideId = process.argv[3];
+      if (!ideId) {
+        console.error('Usage: claude-mem install <ide>');
+        console.error('Available: kimi, cursor, gemini-cli, opencode, openclaw, windsurf, codex-cli');
+        process.exit(1);
+      }
+      switch (ideId) {
+        case 'kimi': {
+          const { installKimi } = await import('./integrations/KimiInstaller.js');
+          process.exit(await installKimi());
+        }
+        case 'cursor': {
+          const { installCursorHooks } = await import('./integrations/CursorHooksInstaller.js');
+          process.exit(await installCursorHooks('user'));
+        }
+        case 'gemini-cli': {
+          const { installGeminiCliHooks } = await import('./integrations/GeminiCliHooksInstaller.js');
+          process.exit(await installGeminiCliHooks());
+        }
+        default: {
+          console.error(`Unknown IDE: ${ideId}`);
+          console.error('Available: kimi, cursor, gemini-cli, opencode, openclaw, windsurf, codex-cli');
+          process.exit(1);
+        }
+      }
+      break;
+    }
+
     case 'cursor': {
       const subcommand = process.argv[3];
       const cursorResult = await handleCursorCommand(subcommand, process.argv.slice(4));
