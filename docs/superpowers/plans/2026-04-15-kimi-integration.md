@@ -213,7 +213,7 @@ export { claudeCodeAdapter, cursorAdapter, geminiCliAdapter, kimiAdapter, rawAda
 bun test tests/kimi-adapter.test.ts
 ```
 
-Expected: all 10 tests pass.
+Expected: all 12 tests pass.
 
 - [ ] **Step 1.7 — Commit**
 
