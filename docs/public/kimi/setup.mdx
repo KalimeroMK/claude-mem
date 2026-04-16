@@ -103,21 +103,32 @@ This checks for prerequisites, installs Bun if missing, and runs the installer a
 
 ## Starting the Worker
 
-The Kimi proxy starts automatically with the claude-mem worker. Start it with:
+The Kimi proxy starts with the claude-mem worker on port `37777`. Start it manually:
 
 ```bash
-# If installed via npm link
 claude-mem worker start
-
-# Or run the pre-built script directly (no build needed)
-bun /path/to/claude-mem/plugin/scripts/worker-service.cjs start
 ```
 
 Verify it's running:
 
 ```bash
-curl http://localhost:11451/v1/models
-# Should proxy through to api.moonshot.cn
+curl -s http://localhost:37777/api/health
+```
+
+### Auto-start on login (macOS)
+
+To have the worker start automatically on every login:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KalimeroMK/claude-mem/main/autostart.sh | bash
+```
+
+This creates a macOS LaunchAgent (`~/Library/LaunchAgents/com.claude-mem.worker.plist`) that starts the worker on login and after reboots.
+
+To remove auto-start:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/KalimeroMK/claude-mem/main/autostart.sh | bash -s -- remove
 ```
 
 ---
