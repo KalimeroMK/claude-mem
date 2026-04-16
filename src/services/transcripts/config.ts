@@ -2,6 +2,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { homedir } from 'os';
 import { join, dirname } from 'path';
 import type { TranscriptSchema, TranscriptWatchConfig } from './types.js';
+import { KIMI_VSCODE_SCHEMA } from '../integrations/KimiVscodeNormalizer.js';
 
 export const DEFAULT_CONFIG_PATH = join(homedir(), '.claude-mem', 'transcript-watch.json');
 export const DEFAULT_STATE_PATH = join(homedir(), '.claude-mem', 'transcript-watch-state.json');
@@ -87,7 +88,8 @@ const CODEX_SAMPLE_SCHEMA: TranscriptSchema = {
 export const SAMPLE_CONFIG: TranscriptWatchConfig = {
   version: 1,
   schemas: {
-    codex: CODEX_SAMPLE_SCHEMA
+    codex: CODEX_SAMPLE_SCHEMA,
+    'kimi-vscode': KIMI_VSCODE_SCHEMA,
   },
   watches: [
     {
