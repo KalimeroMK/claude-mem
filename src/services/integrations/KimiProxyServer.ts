@@ -29,12 +29,20 @@ export class KimiProxyServer {
 
   // ─── Pure helpers (public for testability) ───────────────────────────────
 
+  /**
+   * Derives a stable session ID from the first user message in the conversation.
+   * Returns a random UUID when no user message is present (e.g. system-only context).
+   */
   buildSessionId(messages: KimiMessage[]): string {
     const firstUser = messages.find((m) => m.role === 'user');
     if (!firstUser) return randomUUID();
     return createHash('sha256').update(firstUser.content).digest('hex').slice(0, 16);
   }
 
+  /**
+   * Prepends a system message sourced from KIMI.md when no system message already exists.
+   * Skips injection if the file is missing, empty, or a system message is already present.
+   */
   injectKimiMdContext(messages: KimiMessage[]): KimiMessage[] {
     if (messages.some((m) => m.role === 'system')) return messages;
     const kimiMdPath = resolveKimiMdPath();
@@ -44,6 +52,10 @@ export class KimiProxyServer {
     return [{ role: 'system', content }, ...messages];
   }
 
+  /**
+   * Concatenates all `content` deltas from a raw SSE stream string into a single text result.
+   * Skips malformed JSON lines and the `[DONE]` sentinel gracefully.
+   */
   assembleStreamText(raw: string): string {
     return raw
       .split('\n')
@@ -63,6 +75,7 @@ export class KimiProxyServer {
 
   // ─── Server lifecycle ─────────────────────────────────────────────────────
 
+  /** Starts the proxy server on {@link KIMI_PROXY_PORT}. No-op if already running. */
   start(): void {
     if (this.server) return;
     const self = this;
@@ -75,6 +88,7 @@ export class KimiProxyServer {
     logger.info('KIMI', `Proxy server started on port ${this.port}`);
   }
 
+  /** Stops the proxy server and clears the internal reference. */
   stop(): void {
     this.server?.stop();
     this.server = null;

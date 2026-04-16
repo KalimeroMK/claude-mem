@@ -4,6 +4,18 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+
+### Added
+- **Kimi AI (Moonshot) integration** — three-lane memory support for Kimi users:
+  - Lane A: `KimiProxyServer` — local Bun HTTP reverse proxy on port `11451` that intercepts `/v1/chat/completions`, injects `KIMI.md` system context, fires session lifecycle hooks, and refreshes context after each turn via `ReadableStream.tee()`
+  - Lane B: `KimiInstaller` — bash wrapper at `~/.kimi-mem/bin/kimi`, shell RC patching, clean uninstall with `<claude-mem-context>` tag removal
+  - Lane C: `KimiVscodeNormalizer` — watches Kimi VSCode extension JSON log, converts to JSONL sidecar, feeds into `TranscriptWatcher` pipeline
+- `claude-mem install kimi` CLI command (works without Claude Code — requires Node.js 18+ and Bun)
+- `kimi` platform adapter for observation normalisation (`src/cli/adapters/kimi.ts`)
+- Kimi AI Setup documentation (`docs/public/kimi/setup.mdx`)
+- 43 new tests across 4 files (adapter, proxy, normalizer, installer)
+
 ## [12.1.5] - 2026-04-15
 
 ## Forced update to ship --setting-sources fix
