@@ -66,6 +66,13 @@
         ]
       },
       {
+        "group": "Kimi AI Integration",
+        "icon": "moon",
+        "pages": [
+          "kimi/setup"
+        ]
+      },
+      {
         "group": "Best Practices",
         "icon": "lightbulb",
         "pages": [
