@@ -162,6 +162,13 @@ export function detectInstalledIDEs(): IDEInfo[] {
       supported: true,
       hint: 'MCP-based integration',
     },
+    {
+      id: 'kimi',
+      label: 'Kimi (Moonshot AI)',
+      detected: existsSync(join(home, '.kimi')) || isCommandInPath('kimi'),
+      supported: true,
+      hint: 'proxy + wrapper + VSCode transcript',
+    },
   ];
 }
 

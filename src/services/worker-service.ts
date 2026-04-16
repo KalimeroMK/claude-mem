@@ -70,6 +70,8 @@ import {
 import {
   handleGeminiCliCommand
 } from './integrations/GeminiCliHooksInstaller.js';
+import { KimiProxyServer } from './integrations/KimiProxyServer.js';
+import { handleKimiCommand } from './integrations/KimiInstaller.js';
 
 // Service layer imports
 import { DatabaseManager } from './worker/DatabaseManager.js';
@@ -159,6 +161,9 @@ export class WorkerService {
 
   // Transcript watcher for Codex and other transcript-based clients
   private transcriptWatcher: TranscriptWatcher | null = null;
+
+  // Kimi reverse proxy (Lane A — port 11451)
+  private kimiProxyServer: KimiProxyServer | null = null;
 
   // Initialization tracking
   private initializationComplete: Promise<void>;
@@ -420,6 +425,13 @@ export class WorkerService {
       logger.info('SYSTEM', 'Core initialization complete (DB + search ready)');
 
       await this.startTranscriptWatcher(settings);
+
+      // Start Kimi proxy server (Lane A) — enabled unless explicitly disabled
+      const kimiProxyEnabled = settings.CLAUDE_MEM_KIMI_PROXY_ENABLED !== 'false';
+      if (kimiProxyEnabled) {
+        this.kimiProxyServer = new KimiProxyServer();
+        this.kimiProxyServer.start();
+      }
 
       // Auto-backfill Chroma for all projects if out of sync with SQLite (fire-and-forget)
       if (this.chromaMcpManager) {
@@ -965,6 +977,11 @@ export class WorkerService {
       logger.info('TRANSCRIPT', 'Transcript watcher stopped');
     }
 
+    if (this.kimiProxyServer) {
+      this.kimiProxyServer.stop();
+      this.kimiProxyServer = null;
+    }
+
     // Stop orphan reaper before shutdown (Issue #737)
     if (this.stopOrphanReaper) {
       this.stopOrphanReaper();
@@ -1140,6 +1157,12 @@ async function main() {
       const geminiSubcommand = process.argv[3];
       const geminiResult = await handleGeminiCliCommand(geminiSubcommand, process.argv.slice(4));
       process.exit(geminiResult);
+      break;
+    }
+    case 'kimi': {
+      const kimiSubcommand = process.argv[3] ?? 'help';
+      const kimiResult = await handleKimiCommand(kimiSubcommand, process.argv.slice(4));
+      process.exit(kimiResult);
       break;
     }
 

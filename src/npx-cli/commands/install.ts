@@ -211,6 +211,17 @@ async function setupIDEs(selectedIDEs: string[]): Promise<string[]> {
         }
         break;
       }
+      case 'kimi': {
+        const { installKimi } = await import('../../services/integrations/KimiInstaller.js');
+        const kimiResult = await installKimi();
+        if (kimiResult === 0) {
+          log.success('Kimi: proxy wrapper + VSCode watcher + KIMI.md installed.');
+        } else {
+          log.error('Kimi: integration setup partially failed (see output above).');
+          failedIDEs.push(ideId);
+        }
+        break;
+      }
 
       case 'copilot-cli':
       case 'antigravity':
