@@ -71,6 +71,7 @@ import {
   handleGeminiCliCommand
 } from './integrations/GeminiCliHooksInstaller.js';
 import { KimiProxyServer } from './integrations/KimiProxyServer.js';
+import { KimiSessionWatcher } from './integrations/KimiSessionWatcher.js';
 import { handleKimiCommand } from './integrations/KimiInstaller.js';
 
 // Service layer imports
@@ -164,6 +165,9 @@ export class WorkerService {
 
   // Kimi reverse proxy (Lane A — port 11451)
   private kimiProxyServer: KimiProxyServer | null = null;
+
+  // Kimi session watcher (Lane C — watches ~/.kimi/sessions/*/wire.jsonl)
+  private kimiSessionWatcher: KimiSessionWatcher | null = null;
 
   // Initialization tracking
   private initializationComplete: Promise<void>;
@@ -432,6 +436,11 @@ export class WorkerService {
         this.kimiProxyServer = new KimiProxyServer();
         this.kimiProxyServer.start();
       }
+
+      // Start Kimi session watcher (Lane C) — watches ~/.kimi/sessions/*/wire.jsonl
+      // Captures conversations from both standalone CLI and VSCode extension
+      this.kimiSessionWatcher = new KimiSessionWatcher();
+      this.kimiSessionWatcher.start();
 
       // Auto-backfill Chroma for all projects if out of sync with SQLite (fire-and-forget)
       if (this.chromaMcpManager) {
@@ -980,6 +989,11 @@ export class WorkerService {
     if (this.kimiProxyServer) {
       this.kimiProxyServer.stop();
       this.kimiProxyServer = null;
+    }
+
+    if (this.kimiSessionWatcher) {
+      this.kimiSessionWatcher.stop();
+      this.kimiSessionWatcher = null;
     }
 
     // Stop orphan reaper before shutdown (Issue #737)

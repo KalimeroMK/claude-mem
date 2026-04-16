@@ -14,11 +14,23 @@ import type { TranscriptWatchConfig, WatchTarget } from '../transcripts/types.js
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const KIMI_DIR           = path.join(homedir(), '.kimi');
+const KIMI_CONFIG_TOML   = path.join(KIMI_DIR, 'config.toml');
 const KIMI_MD_PATH       = path.join(KIMI_DIR, 'KIMI.md');
 const KIMI_MEM_BIN_DIR   = path.join(homedir(), '.kimi-mem', 'bin');
 const KIMI_WRAPPER_PATH  = path.join(KIMI_MEM_BIN_DIR, 'kimi');
 const CLAUDE_MEM_DIR     = path.join(homedir(), '.claude-mem');
 const KIMI_SIDECAR_DIR   = path.join(CLAUDE_MEM_DIR, 'kimi-vscode-transcripts');
+const PROXY_BASE_URL     = 'http://localhost:11451/v1';
+const KIMI_REAL_BASE_URL = 'https://api.kimi.com/coding/v1';
+
+/** VS Code Insiders user settings.json path (macOS) */
+const VSCODE_INSIDERS_SETTINGS = path.join(
+  homedir(), 'Library', 'Application Support', 'Code - Insiders', 'User', 'settings.json',
+);
+/** VS Code (stable) user settings.json path (macOS) */
+const VSCODE_SETTINGS = path.join(
+  homedir(), 'Library', 'Application Support', 'Code', 'User', 'settings.json',
+);
 
 export const KIMI_WATCH_NAME = 'kimi-vscode';
 
@@ -39,6 +51,95 @@ else
   exit 1
 fi
 `;
+}
+
+// ─── config.toml patching ─────────────────────────────────────────────────────
+
+/**
+ * Patches ~/.kimi/config.toml to redirect the API base_url to our local proxy.
+ * This makes both the standalone CLI and the VSCode extension route through the
+ * proxy, enabling KIMI.md context injection for every conversation.
+ *
+ * The original URL is preserved with a comment so it can be restored cleanly.
+ */
+export function patchKimiConfigToml(): boolean {
+  if (!existsSync(KIMI_CONFIG_TOML)) return false;
+  let content = readFileSync(KIMI_CONFIG_TOML, 'utf-8');
+
+  // Already patched?
+  if (content.includes(PROXY_BASE_URL)) return true;
+
+  // Replace all base_url = "https://api.kimi.com/..." with our proxy URL
+  // We preserve the original in an adjacent comment for uninstall
+  const patched = content.replace(
+    /(base_url\s*=\s*")(https:\/\/api\.kimi\.com[^"]*?)(")/g,
+    (_, prefix, origUrl, suffix) =>
+      `# claude-mem-original-base_url = "${origUrl}"\n${prefix}${PROXY_BASE_URL}${suffix}`,
+  );
+
+  if (patched === content) return false; // nothing matched
+  writeFileSync(KIMI_CONFIG_TOML, patched, 'utf-8');
+  return true;
+}
+
+/** Restores the original base_url entries in ~/.kimi/config.toml. */
+export function restoreKimiConfigToml(): boolean {
+  if (!existsSync(KIMI_CONFIG_TOML)) return false;
+  let content = readFileSync(KIMI_CONFIG_TOML, 'utf-8');
+  if (!content.includes(PROXY_BASE_URL)) return true; // nothing to restore
+
+  // Restore lines from the preserved comments, then remove the comments
+  let patched = content.replace(
+    /# claude-mem-original-base_url = "([^"]+)"\n(base_url\s*=\s*)"[^"]*"/g,
+    (_, origUrl, prefix) => `${prefix}"${origUrl}"`,
+  );
+
+  writeFileSync(KIMI_CONFIG_TOML, patched, 'utf-8');
+  return true;
+}
+
+// ─── VS Code settings patching ───────────────────────────────────────────────
+
+/**
+ * Adds kimi.environmentVariables.KIMI_BASE_URL to VS Code / VS Code Insiders
+ * settings so the Kimi extension routes API calls through the claude-mem proxy.
+ */
+function patchVscodeSettings(settingsPath: string): boolean {
+  if (!existsSync(settingsPath)) return false;
+
+  let settings: Record<string, unknown> = {};
+  try {
+    settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+  } catch {
+    return false; // malformed JSON — don't clobber
+  }
+
+  const envVars = (settings['kimi.environmentVariables'] ?? {}) as Record<string, string>;
+  if (envVars['KIMI_BASE_URL'] === PROXY_BASE_URL) return true; // already set
+
+  settings['kimi.environmentVariables'] = { ...envVars, KIMI_BASE_URL: PROXY_BASE_URL };
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+  return true;
+}
+
+function unpatchVscodeSettings(settingsPath: string): boolean {
+  if (!existsSync(settingsPath)) return false;
+  let settings: Record<string, unknown> = {};
+  try {
+    settings = JSON.parse(readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+  } catch { return false; }
+
+  const envVars = (settings['kimi.environmentVariables'] ?? {}) as Record<string, string>;
+  if (!('KIMI_BASE_URL' in envVars)) return true;
+
+  const { KIMI_BASE_URL: _removed, ...rest } = envVars;
+  if (Object.keys(rest).length === 0) {
+    delete settings['kimi.environmentVariables'];
+  } else {
+    settings['kimi.environmentVariables'] = rest;
+  }
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + '\n', 'utf-8');
+  return true;
 }
 
 function findRealKimiBinary(): string {
@@ -134,57 +235,79 @@ export async function installKimi(): Promise<number> {
   console.log('\nInstalling Claude-Mem Kimi integration...\n');
   let allOk = true;
 
-  // Step 1: Wrapper (Lane B)
+  // Step 1: Wrapper (Lane B) — CLI proxy via KIMI_BASE_URL env var
   try {
     const realKimi = findRealKimiBinary();
     installWrapperScript(realKimi);
     patchShellRc(path.join(homedir(), '.zshrc'));
     patchShellRc(path.join(homedir(), '.bashrc'));
-    console.log(`  Wrapper installed: ${KIMI_WRAPPER_PATH}`);
+    console.log(`  ✓ Wrapper installed: ${KIMI_WRAPPER_PATH}`);
     if (realKimi) {
-      console.log(`  Real kimi binary: ${realKimi}`);
+      console.log(`    Real kimi binary: ${realKimi}`);
     } else {
-      console.log(`  Note: kimi binary not found in PATH — set KIMI_BASE_URL manually`);
+      console.log(`    Note: kimi binary not found in PATH — wrapper will error until kimi is installed`);
     }
   } catch (error) {
-    console.error(`  Wrapper install failed: ${(error as Error).message}`);
+    console.error(`  ✗ Wrapper install failed: ${(error as Error).message}`);
     allOk = false;
   }
 
-  // Step 2: Transcript watch config (Lane C)
+  // Step 2: Patch ~/.kimi/config.toml (Lane A for VSCode extension + CLI)
+  // Redirects all kimi API calls through our local proxy so KIMI.md is injected.
   try {
-    mkdirSync(KIMI_SIDECAR_DIR, { recursive: true });
-    const config = loadTranscriptConfig();
-    const merged = mergeKimiWatchConfig(config, KIMI_SIDECAR_DIR);
-    writeTranscriptConfig(merged);
-    console.log(`  VSCode transcript watch configured: ${DEFAULT_CONFIG_PATH}`);
-    console.log(`  Sidecar directory: ${KIMI_SIDECAR_DIR}`);
+    if (patchKimiConfigToml()) {
+      console.log(`  ✓ config.toml patched — API calls redirected to ${PROXY_BASE_URL}`);
+      console.log(`    (original URL: ${KIMI_REAL_BASE_URL})`);
+    } else {
+      console.log(`  ℹ  config.toml not found or already patched — skipping`);
+    }
   } catch (error) {
-    console.error(`  Transcript config failed: ${(error as Error).message}`);
-    allOk = false;
+    console.error(`  ✗ config.toml patch failed: ${(error as Error).message}`);
+    // Not fatal — session watcher (Lane C) still captures conversations
   }
 
-  // Step 3: KIMI.md context placeholder
+  // Step 3: Patch VS Code / VS Code Insiders settings (belt-and-suspenders for VSCode extension)
+  let vscodePatchCount = 0;
+  for (const settingsPath of [VSCODE_INSIDERS_SETTINGS, VSCODE_SETTINGS]) {
+    try {
+      if (patchVscodeSettings(settingsPath)) {
+        console.log(`  ✓ VS Code settings patched: ${settingsPath}`);
+        vscodePatchCount++;
+      }
+    } catch (error) {
+      logger.debug('KIMI', 'VS Code settings patch failed', { settingsPath }, error as Error);
+    }
+  }
+  if (vscodePatchCount === 0) {
+    console.log(`  ℹ  VS Code settings not found — proxy will work via config.toml`);
+  }
+
+  // Step 4: Session watcher (Lane C) — watches ~/.kimi/sessions/*/wire.jsonl
+  // No config needed: KimiSessionWatcher is always started by the worker.
+  console.log(`  ✓ Session watcher: automatically captures all kimi conversations`);
+  console.log(`    Watching: ${path.join(KIMI_DIR, 'sessions')}`);
+
+  // Step 5: KIMI.md context placeholder
   try {
     setupKimiMd();
-    console.log(`  KIMI.md placeholder: ${KIMI_MD_PATH}`);
+    console.log(`  ✓ KIMI.md placeholder: ${KIMI_MD_PATH}`);
   } catch (error) {
-    console.error(`  KIMI.md setup failed: ${(error as Error).message}`);
+    console.error(`  ✗ KIMI.md setup failed: ${(error as Error).message}`);
     allOk = false;
   }
 
   console.log(`
 Installation ${allOk ? 'complete' : 'partial'}!
 
-Lane A (Proxy): Start the claude-mem worker to activate the proxy on port 11451.
-  Set in your shell: export KIMI_BASE_URL="http://localhost:11451/v1"
+How it works:
+  • Start the worker: claude-mem worker start
+  • Use kimi normally — conversations are captured automatically
+  • Context from past sessions is injected into KIMI.md before each request
 
-Lane B (Wrapper): Restart your shell or run: source ~/.zshrc
-  The \`kimi\` command will now route through the proxy automatically.
+Auto-start on login (macOS):
+  curl -fsSL https://raw.githubusercontent.com/KalimeroMK/claude-mem/main/autostart.sh | bash
 
-Lane C (VSCode): Restart the claude-mem worker to pick up the new transcript watch.
-
-Context injection: ${KIMI_MD_PATH}
+Context file: ${KIMI_MD_PATH}
 `);
 
   return allOk ? 0 : 1;
@@ -196,16 +319,37 @@ export function uninstallKimi(): number {
   // Remove wrapper
   if (existsSync(KIMI_WRAPPER_PATH)) {
     rmSync(KIMI_WRAPPER_PATH, { force: true });
-    console.log(`  Removed wrapper: ${KIMI_WRAPPER_PATH}`);
+    console.log(`  ✓ Removed wrapper: ${KIMI_WRAPPER_PATH}`);
   }
 
-  // Remove kimi-vscode from transcript config
+  // Restore config.toml base_url
+  try {
+    if (restoreKimiConfigToml()) {
+      console.log(`  ✓ Restored config.toml base_url`);
+    }
+  } catch (error) {
+    console.error(`  ✗ config.toml restore failed: ${(error as Error).message}`);
+  }
+
+  // Remove KIMI_BASE_URL from VS Code settings
+  for (const settingsPath of [VSCODE_INSIDERS_SETTINGS, VSCODE_SETTINGS]) {
+    try {
+      if (existsSync(settingsPath) && unpatchVscodeSettings(settingsPath)) {
+        console.log(`  ✓ Removed KIMI_BASE_URL from ${settingsPath}`);
+      }
+    } catch { /* best-effort */ }
+  }
+
+  // Remove kimi-vscode from transcript config (legacy cleanup)
   if (existsSync(DEFAULT_CONFIG_PATH)) {
     const config = loadTranscriptConfig();
+    const before = config.watches.length;
     config.watches = config.watches.filter((w) => w.name !== KIMI_WATCH_NAME);
     if (config.schemas) delete config.schemas['kimi-vscode'];
-    writeTranscriptConfig(config);
-    console.log(`  Removed kimi-vscode watch from ${DEFAULT_CONFIG_PATH}`);
+    if (config.watches.length !== before) {
+      writeTranscriptConfig(config);
+      console.log(`  ✓ Removed kimi-vscode watch from transcript config`);
+    }
   }
 
   // Remove claude-mem context from KIMI.md (preserve user content)
@@ -213,10 +357,10 @@ export function uninstallKimi(): number {
     let content = readFileSync(KIMI_MD_PATH, 'utf-8');
     content = content.replace(/<claude-mem-context>[\s\S]*?<\/claude-mem-context>/g, '').trim();
     writeFileSync(KIMI_MD_PATH, content ? content + '\n' : '', 'utf-8');
-    console.log(`  Removed context section from ${KIMI_MD_PATH}`);
+    console.log(`  ✓ Removed context section from ${KIMI_MD_PATH}`);
   }
 
-  console.log('\nUninstallation complete!\nRestart claude-mem worker and your shell to apply changes.\n');
+  console.log('\nUninstallation complete!\nRestart the claude-mem worker and your shell to apply changes.\n');
   return 0;
 }
 

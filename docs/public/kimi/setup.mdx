@@ -10,28 +10,27 @@ description: "Add persistent memory to Kimi AI (Moonshot) with claude-mem — wo
 Kimi starts every conversation fresh. Claude-mem changes that by capturing observations and decisions, then injecting relevant context back into each new session via `KIMI.md`.
 
 <Info>
-**How it works:** Claude-mem intercepts Kimi API calls via a local HTTP proxy on port `11451`. It injects `KIMI.md` as a system prompt, records observations after each response, and refreshes the context file automatically.
+**How it works:** Claude-mem captures all kimi conversations by watching `~/.kimi/sessions/` in real time. It also redirects API calls through a local proxy (port `11451`) so `KIMI.md` context is injected into every session automatically.
 </Info>
 
 ## Three Integration Lanes
 
 <CardGroup cols={3}>
   <Card title="Lane A — HTTP Proxy" icon="server">
-    Local proxy on port `11451`. Works with any Kimi-compatible client (API, SDK, CLI).
+    Local proxy on port `11451`. Patches `~/.kimi/config.toml` and VS Code settings so all API calls are intercepted — injects `KIMI.md` as system context.
   </Card>
   <Card title="Lane B — CLI Wrapper" icon="terminal">
-    Transparent bash wrapper at `~/.kimi-mem/bin/kimi`. Drop-in replacement for the `kimi` CLI.
+    Transparent bash wrapper at `~/.kimi-mem/bin/kimi`. Drop-in replacement for the standalone `kimi` CLI.
   </Card>
-  <Card title="Lane C — VSCode Watcher" icon="eye">
-    Watches the Kimi VSCode extension's conversation log and feeds it into the memory pipeline.
+  <Card title="Lane C — Session Watcher" icon="eye">
+    Watches `~/.kimi/sessions/*/wire.jsonl` for new turns. Captures conversations from both CLI and the VSCode extension with zero configuration.
   </Card>
 </CardGroup>
 
 ## Prerequisites
 
 - [Bun](https://bun.sh) runtime (`curl -fsSL https://bun.sh/install | bash`)
-- Kimi CLI or Kimi VSCode extension installed
-- A Moonshot API key (`MOONSHOT_API_KEY`)
+- Kimi CLI or Kimi VSCode extension (`moonshot-ai.kimi-code`) installed
 
 ---
 
@@ -133,18 +132,32 @@ curl -fsSL https://raw.githubusercontent.com/KalimeroMK/claude-mem/main/autostar
 
 ---
 
-## Using the Proxy
+## Using the Integration
 
-Once the worker is running, point your Kimi client at the local proxy instead of `api.moonshot.cn`:
+After `claude-mem install kimi`, everything is automatic:
 
-### Environment variable (easiest)
+1. **Start the worker** — `claude-mem worker start`
+2. **Use kimi normally** — via the VS Code extension or CLI. Conversations are captured by the session watcher.
+3. **Context is injected** — `KIMI.md` is updated after each turn and injected into future sessions via the proxy.
 
-```bash
-export MOONSHOT_BASE_URL=http://localhost:11451
-kimi chat "Hello"
+### How Lane A works (proxy + config patch)
+
+`install kimi` patches `~/.kimi/config.toml` to redirect the kimi API through the local proxy:
+
+```toml
+# Before install:
+base_url = "https://api.kimi.com/coding/v1"
+
+# After install:
+# claude-mem-original-base_url = "https://api.kimi.com/coding/v1"
+base_url = "http://localhost:11451/v1"
 ```
 
-### In code
+It also sets `KIMI_BASE_URL` in VS Code settings as a belt-and-suspenders measure.
+
+### Custom API clients
+
+If you're calling the Moonshot API directly from code, point at the proxy:
 
 ```javascript
 import OpenAI from 'openai';
@@ -157,10 +170,9 @@ const client = new OpenAI({
 
 ### CLI wrapper (Lane B)
 
-After running `claude-mem install kimi`, a wrapper is installed at `~/.kimi-mem/bin/kimi`. Add it to your PATH:
+A wrapper is also installed at `~/.kimi-mem/bin/kimi`. Restart your shell or:
 
 ```bash
-echo 'export PATH="$HOME/.kimi-mem/bin:$PATH"' >> ~/.zshrc
 source ~/.zshrc
 ```
 
@@ -213,16 +225,22 @@ This removes the CLI wrapper, cleans the `<claude-mem-context>` block from `KIMI
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title="Proxy returns 502 Bad Gateway">
-    Check your Moonshot API key: `curl -H "Authorization: Bearer $MOONSHOT_API_KEY" http://localhost:11451/v1/models`
+  <Accordion title="Conversations not being captured">
+    Check that the worker is running: `curl -s http://localhost:37777/api/health`. The session watcher starts automatically with the worker and watches `~/.kimi/sessions/` — no extra config needed.
   </Accordion>
-  <Accordion title="KIMI.md not being injected">
-    Make sure `~/.kimi/KIMI.md` exists and is non-empty. The proxy skips injection if the file is missing or blank.
+  <Accordion title="KIMI.md not being injected into conversations">
+    The proxy must be running AND `~/.kimi/config.toml` must have the patched `base_url`. Verify: `grep base_url ~/.kimi/config.toml` should show `http://localhost:11451/v1`. If not, run `claude-mem kimi install` again.
+  </Accordion>
+  <Accordion title="Proxy returns 502 Bad Gateway">
+    The kimi binary uses OAuth, not API keys. Make sure you're logged in: run `kimi login` in a terminal. The proxy forwards the OAuth token from `~/.kimi/credentials/`.
   </Accordion>
   <Accordion title="Worker not starting">
     Make sure Bun is installed: `bun --version`. Then check worker logs: `claude-mem worker logs`
   </Accordion>
   <Accordion title="CLI wrapper not found after install">
     Add `~/.kimi-mem/bin` to your PATH and reload your shell: `source ~/.zshrc`
+  </Accordion>
+  <Accordion title="Restoring original kimi config (removing claude-mem)">
+    Run `claude-mem kimi uninstall`. This restores `~/.kimi/config.toml`, removes `KIMI_BASE_URL` from VS Code settings, and preserves all your kimi data.
   </Accordion>
 </AccordionGroup>

@@ -15,6 +15,9 @@ export interface KimiMessage {
   content: string;
 }
 
+// Primary API endpoint (new kimi.com API, used in config.toml base_url)
+const KIMI_API_BASE_URL = 'https://api.kimi.com/coding/v1';
+// Legacy moonshot.cn endpoint (kept for backward-compat with old CLI versions)
 const MOONSHOT_BASE_URL = 'https://api.moonshot.cn/v1';
 const KIMI_PROXY_PORT = 11451;
 
@@ -99,10 +102,16 @@ export class KimiProxyServer {
 
   private async handleRequest(req: Request): Promise<Response> {
     const url = new URL(req.url);
-    if (url.pathname === '/v1/chat/completions' && req.method === 'POST') {
+    // Match both /v1/chat/completions (KIMI_BASE_URL=http://localhost:11451/v1)
+    // and /chat/completions (KIMI_BASE_URL=http://localhost:11451 or config.toml base_url redirect)
+    const isChatCompletions = req.method === 'POST' &&
+      (url.pathname === '/v1/chat/completions' || url.pathname === '/chat/completions');
+    if (isChatCompletions) {
       return this.handleChatCompletions(req);
     }
-    return fetch(new Request(`${MOONSHOT_BASE_URL}${url.pathname}${url.search}`, {
+    // Forward everything else to the kimi API, trying both base URLs
+    const upstreamBase = url.pathname.startsWith('/coding/') ? KIMI_API_BASE_URL.replace('/coding/v1', '') : KIMI_API_BASE_URL;
+    return fetch(new Request(`${upstreamBase}${url.pathname}${url.search}`, {
       method: req.method,
       headers: req.headers,
       body: req.body,
@@ -133,7 +142,7 @@ export class KimiProxyServer {
     const upstreamHeaders = new Headers(req.headers);
     upstreamHeaders.delete('x-kimi-cwd');
 
-    const upstream = await fetch(`${MOONSHOT_BASE_URL}/chat/completions`, {
+    const upstream = await fetch(`${KIMI_API_BASE_URL}/chat/completions`, {
       method: 'POST',
       headers: upstreamHeaders,
       body: JSON.stringify(upstreamBody),
