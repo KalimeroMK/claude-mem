@@ -76,8 +76,12 @@ async function main(): Promise<void> {
 
     // -- Install -----------------------------------------------------------
     case 'install': {
-      const ideIndex = args.indexOf('--ide');
-      const ideValue = ideIndex !== -1 ? args[ideIndex + 1] : undefined;
+      const subArgs = args.slice(1); // args after 'install'
+      const ideIndex = subArgs.indexOf('--ide');
+      // Support both `install --ide kimi` and `install kimi`
+      const ideValue = ideIndex !== -1
+        ? subArgs[ideIndex + 1]
+        : (subArgs[0] && !subArgs[0].startsWith('-') ? subArgs[0] : undefined);
 
       const { runInstallCommand } = await import('./commands/install.js');
       await runInstallCommand({ ide: ideValue });
