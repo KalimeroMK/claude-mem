@@ -147,10 +147,13 @@ npx claude-mem install --ide opencode
 Or install for Kimi AI (Moonshot):
 
 ```bash
-npx claude-mem install --ide kimi
+# From the KalimeroMK fork (includes Kimi integration):
+npx github:KalimeroMK/claude-mem install --ide kimi
 ```
 
-> **Fresh Mac with nothing installed?** Install [Node.js](https://nodejs.org) (18+) and [Bun](https://bun.sh) first, then run `npx claude-mem install --ide kimi`. That's it — no Claude Code required. See the [Kimi AI Setup Guide](https://github.com/KalimeroMK/claude-mem/blob/main/docs/public/kimi/setup.mdx) for full details.
+> **Fresh Mac with nothing installed?** Install [Node.js](https://nodejs.org) (18+) and [Bun](https://bun.sh) first, then run `npx github:KalimeroMK/claude-mem install --ide kimi`. That's it — no Claude Code required. See the [Kimi AI Setup Guide](https://github.com/KalimeroMK/claude-mem/blob/main/docs/public/kimi/setup.mdx) for full details.
+>
+> **Note:** `npx claude-mem install --ide kimi` downloads the original npm package which does **not** include the Kimi integration. Use `npx github:KalimeroMK/claude-mem` for this fork.
 
 Or install from the plugin marketplace inside Claude Code:
 
