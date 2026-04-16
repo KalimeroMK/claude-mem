@@ -265,26 +265,20 @@ async function setupIDEs(selectedIDEs: string[]): Promise<string[]> {
 // ---------------------------------------------------------------------------
 
 async function promptForIDESelection(): Promise<string[]> {
-  const detectedIDEs = detectInstalledIDEs();
-  const detected = detectedIDEs.filter((ide) => ide.detected);
+  const allIDEs = detectInstalledIDEs();
+  const supported = allIDEs.filter((ide) => ide.supported);
+  const detected = allIDEs.filter((ide) => ide.detected && ide.supported);
 
-  if (detected.length === 0) {
-    log.warn('No supported IDEs detected. Installing for Claude Code by default.');
-    return ['claude-code'];
-  }
-
-  const options = detected.map((ide) => ({
+  const options = supported.map((ide) => ({
     value: ide.id,
     label: ide.label,
-    hint: ide.supported ? ide.hint : 'coming soon',
+    hint: ide.detected ? (ide.hint ?? 'detected') : (ide.hint ?? 'not detected'),
   }));
 
   const result = await p.multiselect({
     message: 'Which IDEs do you use?',
     options,
-    initialValues: detected
-      .filter((ide) => ide.supported)
-      .map((ide) => ide.id),
+    initialValues: detected.map((ide) => ide.id),
     required: true,
   });
 
